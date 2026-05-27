@@ -3,14 +3,16 @@ const http = require("http");
 const fs   = require("fs");
 const path = require("path");
 
-const PORT = 4000;
+const PORT = process.env.PORT || 4000;
+const SPEECH_SERVER = process.env.SPEECH_SERVER || "http://127.0.0.1:5051";
+const COSYVOICE_SERVER = process.env.COSYVOICE_SERVER || "http://127.0.0.1:5050";
 
 // 일반 모델: POST → 전체 WAV 반환
 const MODELS = {
   "qwen3-stream": {
     label: "Qwen3-TTS · streaming (80ms TTFA)",
     streaming: true,
-    url: "http://127.0.0.1:5051/speak/stream",
+    url: `${SPEECH_SERVER}/speak/stream`,
     body: (text) => ({
       text, language: "korean", seed: 20260526,
       temperature: 0.7, top_k: 50,
@@ -19,22 +21,22 @@ const MODELS = {
   },
   "qwen3-sohee": {
     label: "Qwen3-TTS · sohee",
-    url: "http://127.0.0.1:5051/speak",
+    url: `${SPEECH_SERVER}/speak`,
     body: (text) => ({ text, language: "korean", engine: "qwen3", speaker: "sohee", seed: 20260526 }),
   },
   "qwen3-clone": {
     label: "Qwen3-TTS · voice clone",
-    url: "http://127.0.0.1:5051/speak",
+    url: `${SPEECH_SERVER}/speak`,
     body: (text) => ({ text, language: "korean", engine: "qwen3", seed: 20260526 }),
   },
   "cosyvoice-mlx": {
     label: "CosyVoice3 · MLX",
-    url: "http://127.0.0.1:5051/speak",
+    url: `${SPEECH_SERVER}/speak`,
     body: (text) => ({ text, language: "korean", engine: "cosyvoice", seed: 20260526 }),
   },
   "cosyvoice-pytorch": {
     label: "CosyVoice3 · PyTorch",
-    url: "http://127.0.0.1:5050",
+    url: COSYVOICE_SERVER,
     body: (text) => ({ text, speed: 1.0 }),
   },
 };
@@ -170,5 +172,4 @@ http.createServer(async (req, res) => {
 
 }).listen(PORT, "0.0.0.0", () => {
   console.log(`TTS 비교 서버: http://localhost:${PORT}`);
-  console.log(`Tailscale:     http://100.88.122.15:${PORT}`);
 });
