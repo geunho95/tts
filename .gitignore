@@ -1,0 +1,4 @@
+*.local.md
+*.local
+.env
+node_modules/
