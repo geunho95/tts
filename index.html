@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TTS 비교</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f0f0f;
+    color: #e8e8e8;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: #fff;
+  }
+
+  .input-area {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+
+  .sentences {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .sentence-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .sentence-row input {
+    flex: 1;
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: #e8e8e8;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .sentence-row input:focus { border-color: #555; }
+
+  .sentence-row button.del {
+    background: none;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #666;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .sentence-row button.del:hover { color: #e55; border-color: #e55; }
+
+  .add-btn {
+    background: none;
+    border: 1px dashed #333;
+    border-radius: 6px;
+    color: #555;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    width: 100%;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .add-btn:hover { color: #888; border-color: #555; }
+
+  .models-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .model-card {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .model-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .model-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #ccc;
+  }
+
+  .gen-btn {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    color: #e8e8e8;
+    padding: 7px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .gen-btn:hover { background: #333; }
+  .gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .sentences-audio {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .audio-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+  }
+
+  .audio-label {
+    font-size: 12px;
+    color: #555;
+    width: 16px;
+    flex-shrink: 0;
+    text-align: center;
+  }
+
+  .audio-slot {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  audio {
+    flex: 1;
+    height: 32px;
+    accent-color: #888;
+  }
+
+  .status {
+    font-size: 12px;
+    color: #555;
+    min-width: 80px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .status.loading { color: #888; }
+  .status.done    { color: #5a5; }
+  .status.error   { color: #e55; }
+
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid #333;
+    border-top-color: #888;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<h1>TTS 비교</h1>
+
+<div class="input-area">
+  <div class="sentences" id="sentences"></div>
+  <button class="add-btn" onclick="addSentence()">+ 문장 추가</button>
+</div>
+
+<div class="models-grid" id="models"></div>
+
+<script>
+const DEFAULT_SENTENCES = [
+  "남들은 어디서 만난 인연과 어떻게 사랑을 시작하고 있는지 궁금할 뿐이다.",
+  "인연을 만난다는 것, 세상에 그것보다 어려운 일은 없는 것 같다.",
+  "그래도 언젠가는 나에게도 그런 사람이 나타나지 않을까, 하는 기대를 버리지 못하고 있다.",
+];
+
+let models = [];
+let sentences = [...DEFAULT_SENTENCES];
+
+function renderSentences() {
+  const el = document.getElementById("sentences");
+  el.innerHTML = sentences.map((s, i) => `
+    <div class="sentence-row">
+      <input type="text" value="${escHtml(s)}"
+        oninput="sentences[${i}] = this.value"
+        placeholder="문장 ${i+1}" />
+      <button class="del" onclick="removeSentence(${i})">✕</button>
+    </div>
+  `).join("");
+}
+
+function addSentence() {
+  sentences.push("");
+  renderSentences();
+  renderModels();
+}
+
+function removeSentence(i) {
+  sentences.splice(i, 1);
+  renderSentences();
+  renderModels();
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+async function loadModels() {
+  const res = await fetch("/models");
+  models = await res.json();
+  renderModels();
+}
+
+function renderModels() {
+  const el = document.getElementById("models");
+  el.innerHTML = models.map(m => `
+    <div class="model-card" id="card-${m.id}">
+      <div class="model-header">
+        <span class="model-name">${m.label}</span>
+        <button class="gen-btn" id="btn-${m.id}" onclick="generate('${m.id}')">▶ 생성</button>
+      </div>
+      <div class="sentences-audio">
+        ${sentences.map((_, i) => `
+          <div class="audio-row">
+            <span class="audio-label">${i+1}</span>
+            <div class="audio-slot" id="slot-${m.id}-${i}">
+              <span class="status" id="status-${m.id}-${i}">—</span>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+
+async function generate(modelId) {
+  const btn = document.getElementById(`btn-${modelId}`);
+  btn.disabled = true;
+
+  const texts = sentences.filter(s => s.trim());
+  if (!texts.length) { btn.disabled = false; return; }
+
+  const model = models.find(m => m.id === modelId);
+  if (model?.streaming) {
+    await generateAllStreaming(modelId, texts);
+  } else {
+    await Promise.all(texts.map((text, i) => generateOne(modelId, text, i)));
+  }
+
+  btn.disabled = false;
+}
+
+// 스트리밍 모델: 파이프라인 생성+재생
+// MLX는 동시 접근 불가 → 한 번에 하나씩 fetch
+// 단, i번 재생 중에 i+1번 fetch를 겹침 (seamless 연결)
+async function generateAllStreaming(modelId, texts) {
+  const audioCtx = new AudioContext({ sampleRate: 24000 });
+  if (audioCtx.state !== "running") await audioCtx.resume();
+
+  let playHead = -1;
+  const queues = texts.map(() => ({ chunks: [], done: false }));
+
+  // 1단계: 첫 문장 fetch (단독)
+  await fetchStreamChunks(modelId, texts[0], 0, queues[0]);
+
+  for (let i = 0; i < texts.length; i++) {
+    if (i + 1 < texts.length) {
+      // i번 재생 + i+1번 fetch 동시 실행 (MLX는 하나만 돌아가므로 안전)
+      const [newHead] = await Promise.all([
+        playQueuedChunks(modelId, i, queues[i], audioCtx, playHead),
+        fetchStreamChunks(modelId, texts[i + 1], i + 1, queues[i + 1]),
+      ]);
+      playHead = newHead;
+    } else {
+      // 마지막 문장: 재생만
+      playHead = await playQueuedChunks(modelId, i, queues[i], audioCtx, playHead);
+    }
+  }
+}
+
+// 한 문장의 PCM 청크를 큐에 채우는 함수
+async function fetchStreamChunks(modelId, text, i, queue) {
+  const slot = document.getElementById(`slot-${modelId}-${i}`);
+  slot.innerHTML = `<span class="status loading"><span class="spinner"></span>생성중...</span>`;
+
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`/tts/stream?model=${modelId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.status }));
+      slot.dataset.error = err.error || res.status;
+      queue.done = true;
+      return;
+    }
+
+    slot.dataset.ttfa = "";
+    const reader = res.body.getReader();
+    let remainder = new Uint8Array(0);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      if (!slot.dataset.ttfa) {
+        slot.dataset.ttfa = Date.now() - t0;
+      }
+
+      const merged = new Uint8Array(remainder.length + value.length);
+      merged.set(remainder);
+      merged.set(value, remainder.length);
+      const evenLen = merged.length - (merged.length % 2);
+      remainder = merged.slice(evenLen);
+
+      if (evenLen >= 2) {
+        const dv = new DataView(merged.buffer, merged.byteOffset, evenLen);
+        const n = evenLen / 2;
+        const f32 = new Float32Array(n);
+        for (let j = 0; j < n; j++) f32[j] = dv.getInt16(j * 2, true) / 32768;
+        queue.chunks.push(f32);
+      }
+    }
+    slot.dataset.genMs = Date.now() - t0;
+  } catch (e) {
+    slot.dataset.error = e.message;
+  }
+  queue.done = true;
+}
+
+// 큐에서 청크를 꺼내 AudioContext에 스케줄링
+async function playQueuedChunks(modelId, i, queue, audioCtx, prevPlayHead) {
+  const slot = document.getElementById(`slot-${modelId}-${i}`);
+  let playHead = prevPlayHead;
+  let played = 0;
+  let totalSamples = 0;
+
+  const schedule = (f32) => {
+    if (f32.length === 0) return;
+    const buf = audioCtx.createBuffer(1, f32.length, 24000);
+    buf.copyToChannel(f32, 0);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    if (playHead < 0) playHead = audioCtx.currentTime + 0.05;
+    const when = Math.max(audioCtx.currentTime + 0.02, playHead);
+    src.start(when);
+    playHead = when + buf.duration;
+    totalSamples += f32.length;
+  };
+
+  // 청크가 올 때까지 polling (최대 30s)
+  const deadline = Date.now() + 30000;
+  while (!queue.done || played < queue.chunks.length) {
+    if (played < queue.chunks.length) {
+      schedule(queue.chunks[played++]);
+      if (played === 1) {
+        const ttfa = slot.dataset.ttfa || "?";
+        slot.innerHTML = `<span class="status loading"><span class="spinner"></span>TTFA&nbsp;${ttfa}ms</span>`;
+      }
+    } else if (!queue.done) {
+      if (Date.now() > deadline) break;
+      await new Promise(r => setTimeout(r, 20)); // 20ms polling
+    }
+  }
+
+  // 결과 표시
+  if (slot.dataset.error) {
+    slot.innerHTML = `<span class="status error">오류: ${slot.dataset.error}</span>`;
+  } else {
+    const genSec = ((slot.dataset.genMs || 0) / 1000).toFixed(1);
+    const audioDur = (totalSamples / 24000).toFixed(1);
+    const rtf = totalSamples > 0 ? (parseFloat(genSec) / parseFloat(audioDur)).toFixed(2) : "?";
+    const ttfa = slot.dataset.ttfa || "?";
+    slot.innerHTML = `
+      <span class="status done" style="min-width:auto">TTFA&nbsp;${ttfa}ms</span>
+      <span class="status done">${genSec}s&nbsp;·&nbsp;×${rtf}</span>
+    `;
+  }
+
+  // 재생 완료까지 대기
+  const remain = playHead > 0 ? (playHead - audioCtx.currentTime) : 0;
+  if (remain > 0) await new Promise(r => setTimeout(r, remain * 1000 + 200));
+
+  return playHead;
+}
+
+async function generateOne(modelId, text, i) {
+  const slot   = document.getElementById(`slot-${modelId}-${i}`);
+  const status = document.getElementById(`status-${modelId}-${i}`);
+
+  slot.innerHTML = `<span class="status loading"><span class="spinner"></span>생성중...</span>`;
+
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`/tts?model=${modelId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.status }));
+      slot.innerHTML = `<span class="status error">오류: ${err.error || res.status}</span>`;
+      return;
+    }
+
+    const ttsMs = parseFloat(res.headers.get("x-tts-ms") || 0);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    // 실제 TTS 처리 시간 (대기 시간 제외), 없으면 전체 elapsed
+    const genSec = ttsMs > 0 ? (ttsMs / 1000).toFixed(1) : ((Date.now() - t0) / 1000).toFixed(1);
+
+    slot.innerHTML = `
+      <audio controls src="${url}"></audio>
+      <span class="status done">${genSec}s</span>
+    `;
+
+    const audio = slot.querySelector("audio");
+
+    // RTF = 생성시간 / 오디오 길이 (실제 TTS 처리시간 기준)
+    audio.addEventListener("loadedmetadata", () => {
+      const rtf = (parseFloat(genSec) / audio.duration).toFixed(2);
+      slot.querySelector(".status").textContent = `${genSec}s · ×${rtf}`;
+    }, { once: true });
+
+    // 재생 완료 시 다음 문장 자동 재생
+    audio.addEventListener("ended", () => {
+      const nextSlot = document.getElementById(`slot-${modelId}-${i + 1}`);
+      if (nextSlot) {
+        const nextAudio = nextSlot.querySelector("audio");
+        if (nextAudio) nextAudio.play();
+      }
+    }, { once: true });
+
+    // 첫 번째 문장만 자동 시작 (나머지는 체인으로 연결)
+    if (i === 0) audio.play();
+  } catch (e) {
+    slot.innerHTML = `<span class="status error">${e.message}</span>`;
+  }
+}
+
+
+renderSentences();
+loadModels();
+</script>
+</body>
+</html>
